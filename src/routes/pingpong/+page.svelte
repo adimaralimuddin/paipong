@@ -4,6 +4,9 @@
     let canvas;
     let ctx;
     let animationId;
+    let gameLevel = 1;
+    let isGameOver = false;
+    let touchY = null;
 
     const ball = {
         x: 400,
@@ -178,7 +181,7 @@
 
     function drawCombo() {
         if (comboCount > 1) {
-            ctx.font = 'bold 24px Comic Sans MS';
+            ctx.font = 'bold 24px "Fredoka One"';
             ctx.fillStyle = '#7e57c2';
             ctx.textAlign = 'center';
             ctx.fillText(`${comboCount}x COMBO!`, canvas.width/2, 50);
@@ -278,6 +281,46 @@
         
         createParticles(ball.x, ball.y, powerUpActive ? '255, 215, 0' : '149, 117, 205', 15);
         addScreenShake(10);
+
+        // Increment level after every 5 successful hits
+        if (isPlayer && (paddle.player.score + paddle.computer.score) % 5 === 0) {
+            gameLevel++;
+            if (gameLevel >= 100) {
+                isGameOver = true;
+                createParticles(canvas.width/2, canvas.height/2, '255, 215, 0', 50);
+            }
+        }
+    }
+
+    function handleTouchStart(e) {
+        e.preventDefault();
+        const touch = e.touches[0];
+        const rect = canvas.getBoundingClientRect();
+        touchY = touch.clientY - rect.top;
+    }
+
+    function handleTouchMove(e) {
+        e.preventDefault();
+        if (isGameOver) return;
+        
+        const touch = e.touches[0];
+        const rect = canvas.getBoundingClientRect();
+        const newTouchY = touch.clientY - rect.top;
+        
+        // Move paddle based on touch position
+        if (newTouchY < touchY) {
+            paddle.player.y -= 10;
+        } else if (newTouchY > touchY) {
+            paddle.player.y += 10;
+        }
+        
+        // Keep paddle within canvas bounds
+        paddle.player.y = Math.max(0, Math.min(canvas.height - paddle.height, paddle.player.y));
+        touchY = newTouchY;
+    }
+
+    function handleTouchEnd() {
+        touchY = null;
     }
 
     function resetBall() {
@@ -288,6 +331,18 @@
     }
 
     function update() {
+        if (isGameOver) {
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#FFD700';
+            ctx.font = 'bold 48px "Fredoka One"';
+            ctx.textAlign = 'center';
+            ctx.fillText('🎉 Game Complete! 🎉', canvas.width/2, canvas.height/2 - 30);
+            ctx.font = 'bold 24px "Fredoka One"';
+            ctx.fillText('You reached Level 100!', canvas.width/2, canvas.height/2 + 20);
+            return;
+        }
+
         updateScreenShake();
         updateParticles();
         
@@ -305,6 +360,12 @@
         drawPaddle(canvas.width - paddle.width, paddle.computer.y, false);
         drawCombo();
 
+        // Draw level
+        ctx.fillStyle = '#7e57c2';
+        ctx.font = 'bold 24px "Fredoka One"';
+        ctx.textAlign = 'center';
+        ctx.fillText(`Level ${gameLevel}`, canvas.width/2, 30);
+
         ctx.restore();
 
         animationId = requestAnimationFrame(update);
@@ -313,16 +374,43 @@
     onMount(() => {
         ctx = canvas.getContext('2d');
         
+        // Load custom font
+        const font = new FontFace('Fredoka One', 'url(https://fonts.gstatic.com/s/fredokaone/v14/k3kUo8kEI-tA1RRcTZGmTmHBA6aF8Bf_.woff2)');
+        font.load().then(() => {
+            document.fonts.add(font);
+        });
+
         // Start the game loop
         update();
 
         // Add event listeners
         window.addEventListener('keydown', handleKeyDown);
         window.addEventListener('keyup', handleKeyUp);
+        canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
+        canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
+        canvas.addEventListener('touchend', handleTouchEnd);
+
+        // Make canvas responsive
+        function resizeCanvas() {
+            const container = canvas.parentElement;
+            const scale = Math.min(
+                container.clientWidth / 800,
+                container.clientHeight / 400
+            );
+            canvas.style.width = `${800 * scale}px`;
+            canvas.style.height = `${400 * scale}px`;
+        }
+
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
 
         return () => {
             window.removeEventListener('keydown', handleKeyDown);
             window.removeEventListener('keyup', handleKeyUp);
+            window.removeEventListener('resize', resizeCanvas);
+            canvas.removeEventListener('touchstart', handleTouchStart);
+            canvas.removeEventListener('touchmove', handleTouchMove);
+            canvas.removeEventListener('touchend', handleTouchEnd);
             cancelAnimationFrame(animationId);
         };
     });
@@ -330,6 +418,7 @@
 
 <svelte:head>
     <title>Kitty Pong Game</title>
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka+One&display=swap" rel="stylesheet">
 </svelte:head>
 
 <div class="game-container">
@@ -344,18 +433,26 @@
             <span class="score-value">{paddle.computer.score}</span>
         </div>
     </div>
-    <canvas
-        bind:this={canvas}
-        width="800"
-        height="400"
-        class="game-canvas"
-    />
+    <div class="canvas-container">
+        <canvas
+            bind:this={canvas}
+            width="800"
+            height="400"
+            class="game-canvas"
+        />
+    </div>
     <div class="controls">
-        Use Up and Down arrow keys to move your kitty paw! 🐾
+        {#if isGameOver}
+            Game Complete! 🎉
+        {:else}
+            Use Up/Down arrows or touch screen to move your kitty paw! 🐾
+        {/if}
     </div>
 </div>
 
 <style>
+    @import url('https://fonts.googleapis.com/css2?family=Fredoka+One&display=swap');
+
     .game-container {
         display: flex;
         flex-direction: column;
@@ -364,7 +461,7 @@
         min-height: 100vh;
         background-color: #ede7f6;  /* Very light purple */
         padding: 20px;
-        font-family: 'Comic Sans MS', cursive, sans-serif;
+        font-family: 'Fredoka One', cursive;
     }
 
     .title {
@@ -374,17 +471,30 @@
         text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.1);
     }
 
+    .canvas-container {
+        width: 100%;
+        max-width: 800px;
+        margin: 0 auto;
+        position: relative;
+    }
+
     .game-canvas {
         border: 4px solid #b39ddb;  /* Light purple */
         background-color: #f5f0ff;  /* Very light purple */
         border-radius: 12px;
         box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        touch-action: none;  /* Prevents default touch actions */
+        max-width: 100%;
+        height: auto;
+        display: block;
     }
 
     .score {
         display: flex;
         gap: 40px;
         margin-bottom: 20px;
+        flex-wrap: wrap;
+        justify-content: center;
     }
 
     .score-item {
@@ -416,6 +526,21 @@
         background-color: #d1c4e9;  /* Light purple */
         padding: 10px 20px;
         border-radius: 12px;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        text-align: center;
+    }
+
+    @media (max-width: 600px) {
+        .title {
+            font-size: 2rem;
+        }
+
+        .score {
+            gap: 20px;
+        }
+
+        .controls {
+            font-size: 1rem;
+            padding: 8px 16px;
+        }
     }
 </style>

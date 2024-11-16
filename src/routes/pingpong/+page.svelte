@@ -11,7 +11,8 @@
         size: 12,
         speed: 7,
         dx: 7,
-        dy: 7
+        dy: 7,
+        maxSpeed: 15  // Maximum speed threshold
     };
 
     const paddle = {
@@ -264,7 +265,14 @@
         }
         lastHitTime = now;
 
-        ball.dx *= -1.1; // Increase speed slightly with each hit
+        // Check if ball speed is too high
+        if (Math.abs(ball.dx) > ball.maxSpeed) {
+            // Reset to initial speed while maintaining direction
+            ball.dx = ball.speed * (ball.dx > 0 ? 1 : -1);
+        } else {
+            ball.dx *= -1.1; // Normal speed increase
+        }
+
         const diff = ball.y - (isPlayer ? paddle.player.y : paddle.computer.y + paddle.height / 2);
         ball.dy = diff * 0.2;
         
